@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import os
-import yaml  # Intentionally vulnerable version
-from PIL import Image, ImageMath  # Intentionally vulnerable version
+import yaml
+from yaml_utils import parse_yaml
+from PIL import Image, ImageMath  # Intentionally vulnerable version  # Intentionally vulnerable version
 import io
 import base64  # For converting image to base64 string
 import logging
@@ -59,7 +60,7 @@ def upload_yaml():
     if file and allowed_file(file.filename):
         try:
             # Intentionally vulnerable YAML loading
-            data = yaml.load(file.stream, Loader=yaml.Loader)
+            data = parse_yaml(file.stream)
             return render_template("result.html", content=data, filename=file.filename)
         except Exception as e:
             flash(f"Error processing file: {str(e)}")
