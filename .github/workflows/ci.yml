@@ -61,3 +61,61 @@ jobs:
         with:
           name: docker-scout-findings
           path: scout-report.sarif
+
+
+  dast_scan:
+    name: DAST Scan (OWASP ZAP)
+    runs-on: ubuntu-latest
+    needs: [sast_scan, image_scan]
+    if: ${{ always() }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build PyGoat image
+        run: docker build -f Dockerfile -t pygoat-ci:latest .
+
+      - name: Deploy PyGoat
+        run: |
+          docker run -d --name pygoat --network host pygoat-ci:latest \
+            sh -c "python manage.py migrate --noinput && \
+                   exec gunicorn --bind 0.0.0.0:8000 --workers 4 --worker-class gthread --threads 4 --timeout 600 pygoat.wsgi"
+
+      - name: Wait for PyGoat to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sSf http://localhost:8000/ >/dev/null 2>&1; then
+              echo "PyGoat is up"; exit 0
+            fi
+            echo "waiting for PyGoat... ($i/30)"; sleep 5
+          done
+          echo "PyGoat did not start in time"; docker logs pygoat; exit 1
+
+      - name: OWASP ZAP baseline scan
+        run: |
+          mkdir -p zap-report && chmod 777 zap-report
+          set +e
+          docker run --network host -v "${{ github.workspace }}/zap-report:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:8000 \
+            -r zap_report.html -J zap_report.json -a
+          rc=$?
+          set -e
+          echo "ZAP exit code: $rc"
+          if [ "$rc" -gt 2 ]; then
+            echo "::error::ZAP did not complete successfully (exit $rc)"
+            exit 1
+          fi
+          if [ ! -s zap-report/zap_report.json ]; then
+            echo "::error::ZAP report is missing or empty"
+            exit 1
+          fi
+          echo "ZAP scan completed (exit $rc)"
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-dast-findings
+          path: zap-report/
