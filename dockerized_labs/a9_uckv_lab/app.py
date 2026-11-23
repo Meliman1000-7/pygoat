@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 import os
 import yaml
 from yaml_utils import parse_yaml
-from PIL import Image, ImageMath  # Intentionally vulnerable version  # Intentionally vulnerable version
+from PIL import Image, ImageMath  # Intentionally vulnerable version
 import io
 import base64  # For converting image to base64 string
 import logging
